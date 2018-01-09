@@ -68,7 +68,9 @@ func (ds *dwstate) loadEntryByOffset(off dwarf.Offset) (*dwarf.Entry, error) {
 		// Read next die -- maybe that is the one.
 		die, err := ds.reader.Next()
 		if err != nil {
-			return nil, err
+			ds.reader.Seek(0)
+			ds.cur = nil
+			return nil, errors.New(fmt.Sprintf("loadEntryByOffset(%v): DWARF reader returns error %v from Next()", off, err))
 		}
 		ds.cur = die
 		if ds.cur.Offset == off {
@@ -77,10 +79,13 @@ func (ds *dwstate) loadEntryByOffset(off dwarf.Offset) (*dwarf.Entry, error) {
 	}
 
 	// Fall back to seek
+	verb(1, "seeking to offset 0x%x", off)
 	ds.reader.Seek(off)
 	entry, err := ds.reader.Next()
 	if err != nil {
-		return nil, err
+		ds.cur = nil
+		ds.reader.Seek(off)
+		return nil, errors.New(fmt.Sprintf("loadEntryByOffset(%v): DWARF reader returns error %v following Seek()/Next()", off, err))
 	}
 	ds.cur = entry
 	return ds.cur, nil
@@ -92,14 +97,13 @@ func indent(ilevel int) {
 	}
 }
 
-func (ds *dwstate) dumpEntry(idx int, dumpKids bool, ilevel int) error {
+func (ds *dwstate) dumpEntry(idx int, dumpKids bool, dumpParent bool, ilevel int) error {
 	entry, err := ds.loadEntryById(idx)
 	if err != nil {
 		return err
 	}
 	indent(ilevel)
-	off := ds.dieOffsets[idx]
-	fmt.Fprintf(os.Stderr, "0x%x: %v\n", off, entry.Tag)
+	fmt.Fprintf(os.Stderr, "0x%x: %v\n", entry.Offset, entry.Tag)
 	for _, f := range entry.Field {
 		indent(ilevel)
 		fmt.Fprintf(os.Stderr, "at=%v val=0x%x\n", f.Attr, f.Val)
@@ -107,7 +111,14 @@ func (ds *dwstate) dumpEntry(idx int, dumpKids bool, ilevel int) error {
 	if dumpKids {
 		ksl := ds.kids[idx]
 		for _, k := range ksl {
-			ds.dumpEntry(k, true, ilevel+2)
+			ds.dumpEntry(k, true, false, ilevel+2)
+		}
+	}
+	if dumpParent {
+		p, ok := ds.parent[idx]
+		if ok {
+			fmt.Fprintf(os.Stderr, "\nParent:\n")
+			ds.dumpEntry(p, false, false, ilevel)
 		}
 	}
 	return nil
@@ -186,8 +197,11 @@ func examineFile(filename string) {
 		// All abstract origin references should be resolvable.
 		_, err = ds.loadEntryByOffset(ooff)
 		if err != nil {
-			warn("unresolved abstract origin ref from DIE at offset 0x%x to bad offset 0x%x\n", off, ooff)
-			ds.dumpEntry(idx, false, 0)
+			warn("unresolved abstract origin ref from DIE %d at offset 0x%x to bad offset 0x%x\n", idx, off, ooff)
+			err := ds.dumpEntry(idx, false, true, 0)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
+			}
 			return
 		}
 	}
