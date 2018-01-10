@@ -79,7 +79,7 @@ func (ds *dwstate) loadEntryByOffset(off dwarf.Offset) (*dwarf.Entry, error) {
 	}
 
 	// Fall back to seek
-	verb(1, "seeking to offset 0x%x", off)
+	verb(2, "seeking to offset 0x%x", off)
 	ds.reader.Seek(off)
 	entry, err := ds.reader.Next()
 	if err != nil {
