@@ -18,3 +18,9 @@ at=Highpc val=0xc24aea
 at=FrameBase val=0x9c
 $
 ```
+
+In general if a compiler emits bad/illegal DWARF, the incorrect DWARF won't typically be caught by GDB unless you happen to doing something in your debug session that happens to cause GDB to use the specific bad portion of the DWARF (for example, printing variable Y in routine X). 
+
+In contrast, when linking a program on the Mac, dsymutil has to post-process and fix up all of the DWARF for a module, so it tends to error/crash right away (as opposed to having latent DWARF bugs lurking). 
+
+The intent of this tool was to have something easily buildable and runnable on Lix that would detect the same classes of problems that would cause dsymutil errors on the Mac.
