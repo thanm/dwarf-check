@@ -9,11 +9,12 @@ import (
 )
 
 type dwstate struct {
-	reader     *dwarf.Reader
-	cur        *dwarf.Entry
-	dieOffsets []dwarf.Offset
-	kids       map[int][]int
-	parent     map[int]int
+	reader      *dwarf.Reader
+	cur         *dwarf.Entry
+	idxByOffset map[dwarf.Offset]int
+	dieOffsets  []dwarf.Offset
+	kids        map[int][]int
+	parent      map[int]int
 }
 
 // Given a DWARF reader, initialize dwstate
@@ -21,15 +22,14 @@ func (ds *dwstate) initialize(rdr *dwarf.Reader) error {
 	ds.reader = rdr
 	ds.kids = make(map[int][]int)
 	ds.parent = make(map[int]int)
+	ds.idxByOffset = make(map[dwarf.Offset]int)
 	var lastOffset dwarf.Offset
 	var nstack []int
 	for entry, err := rdr.Next(); entry != nil; entry, err = rdr.Next() {
+		verb(3, "dwstate.initialize: entry = %v", entry)
 		if err != nil {
 			return err
 		}
-		lastOffset = entry.Offset
-		idx := len(ds.dieOffsets)
-		ds.dieOffsets = append(ds.dieOffsets, lastOffset)
 		if entry.Tag == 0 {
 			// terminator
 			if len(nstack) == 0 {
@@ -38,6 +38,13 @@ func (ds *dwstate) initialize(rdr *dwarf.Reader) error {
 			nstack = nstack[:len(nstack)-1]
 			continue
 		}
+		if _, found := ds.idxByOffset[entry.Offset]; found {
+			return errors.New(fmt.Sprintf("DIE clash on offset 0x%x", entry.Offset))
+		}
+		idx := len(ds.dieOffsets)
+		ds.idxByOffset[entry.Offset] = idx
+		lastOffset = entry.Offset
+		ds.dieOffsets = append(ds.dieOffsets, lastOffset)
 		if len(nstack) > 0 {
 			parent := nstack[len(nstack)-1]
 			ds.kids[parent] = append(ds.kids[parent], idx)
@@ -58,6 +65,11 @@ func (ds *dwstate) loadEntryById(idx int) (*dwarf.Entry, error) {
 }
 
 func (ds *dwstate) loadEntryByOffset(off dwarf.Offset) (*dwarf.Entry, error) {
+
+	// Check to make sure this is a valid offset
+	if _, found := ds.idxByOffset[off]; !found {
+		return nil, errors.New(fmt.Sprintf("invalid offset 0x%x passed to loadEntryByOffset", off))
+	}
 
 	// Current DIE happens to be the one for which we're looking?
 	if ds.cur != nil {
@@ -173,13 +185,18 @@ func examineFile(filename string) {
 	verb(1, "examining DWARF for %s", filename)
 	rdr := d.Reader()
 	ds := dwstate{}
-	ds.initialize(rdr)
+	err = ds.initialize(rdr)
+	if err != nil {
+		warn("error initializing dwarf state examiner: %v", err)
+		return
+	}
 
 	dcount := 0
 	absocount := 0
 
 	// Walk DIEs
 	for idx, off := range ds.dieOffsets {
+		verb(3, "examining DIE at offset 0x%x", off)
 		die, err := ds.loadEntryByOffset(off)
 		dcount += 1
 		if err != nil {
@@ -195,8 +212,9 @@ func examineFile(filename string) {
 		absocount += 1
 
 		// All abstract origin references should be resolvable.
-		_, err = ds.loadEntryByOffset(ooff)
-		if err != nil {
+		var entry *dwarf.Entry
+		entry, err = ds.loadEntryByOffset(ooff)
+		if err != nil || entry == nil {
 			warn("unresolved abstract origin ref from DIE %d at offset 0x%x to bad offset 0x%x\n", idx, off, ooff)
 			err := ds.dumpEntry(idx, false, true, 0)
 			if err != nil {
