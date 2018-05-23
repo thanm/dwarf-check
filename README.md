@@ -23,4 +23,4 @@ In general if a compiler emits bad/illegal DWARF, the incorrect DWARF won't typi
 
 In contrast, when linking a program on the Mac, dsymutil has to post-process and fix up all of the DWARF for a module, so it tends to error/crash right away (as opposed to having latent DWARF bugs lurking). 
 
-The intent of this tool was to have something easily buildable and runnable on Lix that would detect the same classes of problems that would cause dsymutil errors on the Mac.
+The intent of this tool was to have something easily buildable and runnable on Linux that would detect the same classes of problems that would cause dsymutil errors on the Mac.
