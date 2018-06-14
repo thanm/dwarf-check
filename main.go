@@ -14,7 +14,7 @@ import (
 )
 
 var verbflag = flag.Int("v", 0, "Verbose trace output level")
-var dumpflag = flag.Bool("dump", false, "Dump DEX/APK info to stdout")
+var iterflag = flag.Int("iters", 1, "Number of iterations")
 var st int
 
 func verb(vlevel int, s string, a ...interface{}) {
@@ -48,7 +48,9 @@ func main() {
 		usage("please supply one or more ELF files as command line arguments")
 	}
 	for _, arg := range flag.Args() {
-		examineFile(arg)
+		for i := 0; i < *iterflag; i++ {
+			examineFile(arg)
+		}
 	}
 	verb(1, "leaving main")
 	os.Exit(st)
