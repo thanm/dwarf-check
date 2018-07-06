@@ -3,6 +3,7 @@ package main
 import (
 	"debug/dwarf"
 	"debug/elf"
+	"debug/macho"
 	"errors"
 	"fmt"
 	"os"
@@ -164,20 +165,32 @@ func (ds *dwstate) Parent(idx int) (*dwarf.Entry, error) {
 	return die, nil
 }
 
+
+
 func examineFile(filename string) {
 
+	var d *dwarf.Data
+	var derr error
+	
 	verb(1, "loading ELF for %s", filename)
-	f, err := elf.Open(filename)
-	if err != nil {
-		warn("unable to open %s: %v\n", filename, err)
-		return
+	f, eerr := elf.Open(filename)
+	if eerr != nil {
+		// Try macho
+		f, merr := macho.Open(filename)
+		if merr != nil {
+			warn("unable to open as ELF %s: %v\n", filename, eerr)
+			warn("unable to open as Mach-O %s: %v\n", filename, merr)
+			return
+		}
+		d, derr = f.DWARF()
+	} else {
+		d, derr = f.DWARF()
 	}
-
+		
 	// Create DWARF reader
 	verb(1, "loading DWARF for %s", filename)
-	d, err := f.DWARF()
-	if err != nil {
-		warn("error reading DWARF: %v", err)
+	if derr != nil {
+		warn("error reading DWARF: %v", derr)
 		return
 	}
 
@@ -185,7 +198,7 @@ func examineFile(filename string) {
 	verb(1, "examining DWARF for %s", filename)
 	rdr := d.Reader()
 	ds := dwstate{}
-	err = ds.initialize(rdr)
+	err := ds.initialize(rdr)
 	if err != nil {
 		warn("error initializing dwarf state examiner: %v", err)
 		return
