@@ -9,6 +9,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"runtime"
@@ -19,6 +20,8 @@ var verbflag = flag.Int("v", 0, "Verbose trace output level")
 var iterflag = flag.Int("iters", 1, "Number of iterations")
 var memprofileflag = flag.String("memprofile", "", "write memory profile to `file`")
 var memprofilerateflag = flag.Int64("memprofilerate", 0, "set runtime.MemProfileRate to `rate`")
+var cpuprofileflag = flag.String("cpuprofile", "", "write CPU profile to `file`")
+var psmflag = flag.String("psm", "", "write /proc/self/maps to `file`")
 
 var st int
 var atExitFuncs []func()
@@ -69,7 +72,6 @@ func setupMemProfile() {
 	atExit(func() {
 		// Profile all outstanding allocations.
 		runtime.GC()
-		const writeLegacyFormat = 1
 		if err := pprof.Lookup("heap").WriteTo(f, 0); err != nil {
 			log.Fatalf("%v", err)
 		}
@@ -82,6 +84,37 @@ func main() {
 	flag.Parse()
 	if *memprofileflag != "" {
 		setupMemProfile()
+	}
+	if *cpuprofileflag != "" {
+		f, err := os.Create(*cpuprofileflag)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		verb(1, "initiating CPU profile")
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		atExit(func() {
+			verb(1, "finishing CPU profile")
+			pprof.StopCPUProfile()
+		})
+	}
+	if *psmflag != "" {
+		f, err := os.Create(*psmflag)
+		if err != nil {
+			log.Fatal("could not open -psm file: ", err)
+		}
+		verb(1, "collecting /proc/self/maps")
+		content, err := ioutil.ReadFile("/proc/self/maps")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if _, err := f.Write(content); err != nil {
+			log.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
+			log.Fatal(err)
+		}
 	}
 	verb(1, "in main")
 	if flag.NArg() == 0 {
