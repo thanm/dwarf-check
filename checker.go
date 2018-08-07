@@ -165,13 +165,11 @@ func (ds *dwstate) Parent(idx int) (*dwarf.Entry, error) {
 	return die, nil
 }
 
-
-
-func examineFile(filename string) {
+func examineFile(filename string) bool {
 
 	var d *dwarf.Data
 	var derr error
-	
+
 	verb(1, "loading ELF for %s", filename)
 	f, eerr := elf.Open(filename)
 	if eerr != nil {
@@ -180,18 +178,18 @@ func examineFile(filename string) {
 		if merr != nil {
 			warn("unable to open as ELF %s: %v\n", filename, eerr)
 			warn("unable to open as Mach-O %s: %v\n", filename, merr)
-			return
+			return false
 		}
 		d, derr = f.DWARF()
 	} else {
 		d, derr = f.DWARF()
 	}
-		
+
 	// Create DWARF reader
 	verb(1, "loading DWARF for %s", filename)
 	if derr != nil {
 		warn("error reading DWARF: %v", derr)
-		return
+		return false
 	}
 
 	// Initialize state
@@ -201,7 +199,7 @@ func examineFile(filename string) {
 	err := ds.initialize(rdr)
 	if err != nil {
 		warn("error initializing dwarf state examiner: %v", err)
-		return
+		return false
 	}
 
 	dcount := 0
@@ -214,7 +212,7 @@ func examineFile(filename string) {
 		dcount += 1
 		if err != nil {
 			warn("error examining DWARF: %v", err)
-			return
+			return false
 		}
 
 		// Does it have an abstract origin?
@@ -233,8 +231,10 @@ func examineFile(filename string) {
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
 			}
-			return
+			return false
 		}
 	}
-	verb(1, "read %d DIEs, processed %d abstract origin refs", dcount, absocount)
+	verb(1, "read %d DIEs, processed %d abstract origin refs",
+		dcount, absocount)
+	return true
 }
