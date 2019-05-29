@@ -22,6 +22,7 @@ var memprofileflag = flag.String("memprofile", "", "write memory profile to `fil
 var memprofilerateflag = flag.Int64("memprofilerate", 0, "set runtime.MemProfileRate to `rate`")
 var cpuprofileflag = flag.String("cpuprofile", "", "write CPU profile to `file`")
 var psmflag = flag.String("psm", "", "write /proc/self/maps to `file`")
+var dumplineflag = flag.Bool("dumpline", false, "Dump dwarf line table.")
 
 var st int
 var atExitFuncs []func()
@@ -122,7 +123,7 @@ func main() {
 	}
 	for _, arg := range flag.Args() {
 		for i := 0; i < *iterflag; i++ {
-			examineFile(arg)
+			examineFile(arg, *dumplineflag)
 		}
 	}
 	verb(1, "leaving main")

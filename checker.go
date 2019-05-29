@@ -1,11 +1,15 @@
 package main
 
+// TODO: rewrite this code to operate just within the scope of
+// individual compilation units.
+
 import (
 	"debug/dwarf"
 	"debug/elf"
 	"debug/macho"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -165,7 +169,7 @@ func (ds *dwstate) Parent(idx int) (*dwarf.Entry, error) {
 	return die, nil
 }
 
-func examineFile(filename string) bool {
+func examineFile(filename string, readline bool) bool {
 
 	var d *dwarf.Data
 	var derr error
@@ -236,5 +240,45 @@ func examineFile(filename string) bool {
 	}
 	verb(1, "read %d DIEs, processed %d abstract origin refs",
 		dcount, absocount)
+
+	if readline {
+		dr := d.Reader()
+		for {
+			ent, err := dr.Next()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
+				return false
+			} else if ent == nil {
+				break
+			}
+			if ent.Tag != dwarf.TagCompileUnit {
+				dr.SkipChildren()
+				continue
+			}
+
+			// Decode CU's line table.
+			lr, err := d.LineReader(ent)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
+				return false
+			} else if lr == nil {
+				continue
+			}
+
+			for {
+				var line dwarf.LineEntry
+				err := lr.Next(&line)
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					fmt.Fprintf(os.Stderr, "%v\n", err)
+					return false
+				}
+				fmt.Printf("Address: %x File: %s Line: %d IsStmt: %v PrologueEnd: %v\n", line.Address, line.File.Name, line.Line, line.IsStmt, line.PrologueEnd)
+			}
+		}
+	}
+
 	return true
 }

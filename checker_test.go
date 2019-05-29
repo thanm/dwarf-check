@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -39,10 +38,8 @@ func TestBasic(t *testing.T) {
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "exe is %s\n", exe)
-
 	// Now examine the result.
-	res := examineFile(exe)
+	res := examineFile(exe, true)
 	if !res {
 		t.Errorf("examineFile returned false")
 	}
