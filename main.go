@@ -31,6 +31,7 @@ func atExit(f func()) {
 	atExitFuncs = append(atExitFuncs, f)
 }
 
+// Exit runs at-exit hooks and then exits with previously recorded code.
 func Exit(code int) {
 	for i := len(atExitFuncs) - 1; i >= 0; i-- {
 		f := atExitFuncs[i]

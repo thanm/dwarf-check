@@ -7,7 +7,6 @@ import (
 	"debug/dwarf"
 	"debug/elf"
 	"debug/macho"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -38,13 +37,13 @@ func (ds *dwstate) initialize(rdr *dwarf.Reader) error {
 		if entry.Tag == 0 {
 			// terminator
 			if len(nstack) == 0 {
-				return errors.New(fmt.Sprintf("malformed dwarf at offset %v: nstack underflow", lastOffset))
+				return fmt.Errorf("malformed dwarf at offset %v: nstack underflow", lastOffset)
 			}
 			nstack = nstack[:len(nstack)-1]
 			continue
 		}
 		if _, found := ds.idxByOffset[entry.Offset]; found {
-			return errors.New(fmt.Sprintf("DIE clash on offset 0x%x", entry.Offset))
+			return fmt.Errorf("DIE clash on offset 0x%x", entry.Offset)
 		}
 		idx := len(ds.dieOffsets)
 		ds.idxByOffset[entry.Offset] = idx
@@ -60,12 +59,12 @@ func (ds *dwstate) initialize(rdr *dwarf.Reader) error {
 		}
 	}
 	if len(nstack) > 0 {
-		return errors.New("missing terminator")
+		return fmt.Errorf("missing terminator")
 	}
 	return nil
 }
 
-func (ds *dwstate) loadEntryById(idx int) (*dwarf.Entry, error) {
+func (ds *dwstate) loadEntryByID(idx int) (*dwarf.Entry, error) {
 	return ds.loadEntryByOffset(ds.dieOffsets[idx])
 }
 
@@ -73,7 +72,7 @@ func (ds *dwstate) loadEntryByOffset(off dwarf.Offset) (*dwarf.Entry, error) {
 
 	// Check to make sure this is a valid offset
 	if _, found := ds.idxByOffset[off]; !found {
-		return nil, errors.New(fmt.Sprintf("invalid offset 0x%x passed to loadEntryByOffset", off))
+		return nil, fmt.Errorf("invalid offset 0x%x passed to loadEntryByOffset", off)
 	}
 
 	// Current DIE happens to be the one for which we're looking?
@@ -87,7 +86,7 @@ func (ds *dwstate) loadEntryByOffset(off dwarf.Offset) (*dwarf.Entry, error) {
 		if err != nil {
 			ds.reader.Seek(0)
 			ds.cur = nil
-			return nil, errors.New(fmt.Sprintf("loadEntryByOffset(%v): DWARF reader returns error %v from Next()", off, err))
+			return nil, fmt.Errorf("loadEntryByOffset(%v): DWARF reader returns error %v from Next()", off, err)
 		}
 		ds.cur = die
 		if ds.cur.Offset == off {
@@ -102,7 +101,7 @@ func (ds *dwstate) loadEntryByOffset(off dwarf.Offset) (*dwarf.Entry, error) {
 	if err != nil {
 		ds.cur = nil
 		ds.reader.Seek(off)
-		return nil, errors.New(fmt.Sprintf("loadEntryByOffset(%v): DWARF reader returns error %v following Seek()/Next()", off, err))
+		return nil, fmt.Errorf("loadEntryByOffset(%v): DWARF reader returns error %v following Seek()/Next()", off, err)
 	}
 	ds.cur = entry
 	return ds.cur, nil
@@ -115,7 +114,7 @@ func indent(ilevel int) {
 }
 
 func (ds *dwstate) dumpEntry(idx int, dumpKids bool, dumpParent bool, ilevel int) error {
-	entry, err := ds.loadEntryById(idx)
+	entry, err := ds.loadEntryByID(idx)
 	if err != nil {
 		return err
 	}
@@ -145,7 +144,7 @@ func (ds *dwstate) Children(idx int) ([]*dwarf.Entry, error) {
 	sl := ds.kids[idx]
 	ret := make([]*dwarf.Entry, len(sl))
 	for i, k := range sl {
-		die, err := ds.loadEntryById(k)
+		die, err := ds.loadEntryByID(k)
 		if err != nil {
 			return ret, err
 		}
@@ -160,9 +159,9 @@ func (ds *dwstate) Parent(idx int) (*dwarf.Entry, error) {
 	off := ds.dieOffsets[idx]
 	p, found := ds.parent[idx]
 	if !found {
-		return ret, errors.New(fmt.Sprintf("no parent entry for DIE 0x%x", off))
+		return ret, fmt.Errorf("no parent entry for DIE 0x%x", off)
 	}
-	die, err := ds.loadEntryById(p)
+	die, err := ds.loadEntryByID(p)
 	if err != nil {
 		return ret, err
 	}
@@ -213,7 +212,7 @@ func examineFile(filename string, readline bool) bool {
 	for idx, off := range ds.dieOffsets {
 		verb(3, "examining DIE at offset 0x%x", off)
 		die, err := ds.loadEntryByOffset(off)
-		dcount += 1
+		dcount++
 		if err != nil {
 			warn("error examining DWARF: %v", err)
 			return false
@@ -224,7 +223,7 @@ func examineFile(filename string, readline bool) bool {
 		if !originOK {
 			continue
 		}
-		absocount += 1
+		absocount++
 
 		// All abstract origin references should be resolvable.
 		var entry *dwarf.Entry
