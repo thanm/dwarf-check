@@ -39,7 +39,7 @@ func TestBasic(t *testing.T) {
 	}
 
 	// Now examine the result.
-	res := examineFile(exe, true)
+	res := examineFile(exe, SilentReadLine)
 	if !res {
 		t.Errorf("examineFile returned false")
 	}

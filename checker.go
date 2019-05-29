@@ -12,6 +12,14 @@ import (
 	"os"
 )
 
+type readLineMode int
+
+const (
+	NoReadLine     readLineMode = 0
+	SilentReadLine readLineMode = 1
+	DumpReadLine   readLineMode = 2
+)
+
 type dwstate struct {
 	reader      *dwarf.Reader
 	cur         *dwarf.Entry
@@ -168,7 +176,7 @@ func (ds *dwstate) Parent(idx int) (*dwarf.Entry, error) {
 	return die, nil
 }
 
-func examineFile(filename string, readline bool) bool {
+func examineFile(filename string, readline readLineMode) bool {
 
 	var d *dwarf.Data
 	var derr error
@@ -240,7 +248,7 @@ func examineFile(filename string, readline bool) bool {
 	verb(1, "read %d DIEs, processed %d abstract origin refs",
 		dcount, absocount)
 
-	if readline {
+	if readline != NoReadLine {
 		dr := d.Reader()
 		for {
 			ent, err := dr.Next()
@@ -274,7 +282,9 @@ func examineFile(filename string, readline bool) bool {
 					fmt.Fprintf(os.Stderr, "%v\n", err)
 					return false
 				}
-				fmt.Printf("Address: %x File: %s Line: %d IsStmt: %v PrologueEnd: %v\n", line.Address, line.File.Name, line.Line, line.IsStmt, line.PrologueEnd)
+				if readline == DumpReadLine {
+					fmt.Printf("Address: %x File: %s Line: %d IsStmt: %v PrologueEnd: %v\n", line.Address, line.File.Name, line.Line, line.IsStmt, line.PrologueEnd)
+				}
 			}
 		}
 	}

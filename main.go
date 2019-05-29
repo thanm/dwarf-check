@@ -22,6 +22,7 @@ var memprofileflag = flag.String("memprofile", "", "write memory profile to `fil
 var memprofilerateflag = flag.Int64("memprofilerate", 0, "set runtime.MemProfileRate to `rate`")
 var cpuprofileflag = flag.String("cpuprofile", "", "write CPU profile to `file`")
 var psmflag = flag.String("psm", "", "write /proc/self/maps to `file`")
+var readlineflag = flag.Bool("readline", false, "Read dwarf line table.")
 var dumplineflag = flag.Bool("dumpline", false, "Dump dwarf line table.")
 
 var st int
@@ -122,9 +123,15 @@ func main() {
 	if flag.NArg() == 0 {
 		usage("please supply one or more ELF files as command line arguments")
 	}
+	readline := NoReadLine
+	if *dumplineflag {
+		readline = DumpReadLine
+	} else if *readlineflag {
+		readline = SilentReadLine
+	}
 	for _, arg := range flag.Args() {
 		for i := 0; i < *iterflag; i++ {
-			examineFile(arg, *dumplineflag)
+			examineFile(arg, readline)
 		}
 	}
 	verb(1, "leaving main")
