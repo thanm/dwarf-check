@@ -15,9 +15,9 @@ import (
 type readLineMode int
 
 const (
-	NoReadLine     readLineMode = 0
-	SilentReadLine readLineMode = 1
-	DumpReadLine   readLineMode = 2
+	noReadLine     readLineMode = 0
+	silentReadLine readLineMode = 1
+	dumpReadLine   readLineMode = 2
 )
 
 type dwstate struct {
@@ -248,7 +248,7 @@ func examineFile(filename string, readline readLineMode) bool {
 	verb(1, "read %d DIEs, processed %d abstract origin refs",
 		dcount, absocount)
 
-	if readline != NoReadLine {
+	if readline != noReadLine {
 		dr := d.Reader()
 		for {
 			ent, err := dr.Next()
@@ -282,7 +282,7 @@ func examineFile(filename string, readline readLineMode) bool {
 					fmt.Fprintf(os.Stderr, "%v\n", err)
 					return false
 				}
-				if readline == DumpReadLine {
+				if readline == dumpReadLine {
 					fmt.Printf("Address: %x File: %s Line: %d IsStmt: %v PrologueEnd: %v\n", line.Address, line.File.Name, line.Line, line.IsStmt, line.PrologueEnd)
 				}
 			}

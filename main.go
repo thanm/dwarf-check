@@ -123,11 +123,11 @@ func main() {
 	if flag.NArg() == 0 {
 		usage("please supply one or more ELF files as command line arguments")
 	}
-	readline := NoReadLine
+	readline := noReadLine
 	if *dumplineflag {
-		readline = DumpReadLine
+		readline = dumpReadLine
 	} else if *readlineflag {
-		readline = SilentReadLine
+		readline = silentReadLine
 	}
 	for _, arg := range flag.Args() {
 		for i := 0; i < *iterflag; i++ {
