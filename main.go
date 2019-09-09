@@ -24,6 +24,7 @@ var cpuprofileflag = flag.String("cpuprofile", "", "write CPU profile to `file`"
 var psmflag = flag.String("psm", "", "write /proc/self/maps to `file`")
 var readlineflag = flag.Bool("readline", false, "Read dwarf line table.")
 var dumplineflag = flag.Bool("dumpline", false, "Dump dwarf line table.")
+var dumpbuildidflag = flag.Bool("dumpbuildid", false, "Dump build ids if available.")
 
 var st int
 var atExitFuncs []func()
@@ -131,7 +132,7 @@ func main() {
 	}
 	for _, arg := range flag.Args() {
 		for i := 0; i < *iterflag; i++ {
-			examineFile(arg, readline)
+			examineFile(arg, readline, *dumpbuildidflag)
 		}
 	}
 	verb(1, "leaving main")

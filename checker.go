@@ -7,6 +7,8 @@ import (
 	"debug/dwarf"
 	"debug/elf"
 	"debug/macho"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -176,7 +178,71 @@ func (ds *dwstate) Parent(idx int) (*dwarf.Entry, error) {
 	return die, nil
 }
 
-func examineFile(filename string, readline readLineMode) bool {
+func readAligned4(r io.Reader, sz int32) ([]byte, error) {
+	full := (sz + 3) &^ 3
+	data := make([]byte, full)
+	_, err := io.ReadFull(r, data)
+	if err != nil {
+		return nil, err
+	}
+	data = data[:sz]
+	return data, nil
+}
+
+func dumpBuildIdsInNoteSection(ef *elf.File, sect *elf.Section) error {
+	const wantNameSize = 4 // GNU\0
+	var wantNoteName = [...]byte{'G', 'N', 'U', 0}
+	const wantNoteType = 3 // NT_GNU_BUILD_ID
+	r := sect.Open()
+	for {
+		var namesize, descsize, noteType int32
+		if err := binary.Read(r, ef.ByteOrder, &namesize); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if namesize != wantNameSize {
+			continue
+		}
+		if err := binary.Read(r, ef.ByteOrder, &descsize); err != nil {
+			return err
+		}
+		if err := binary.Read(r, ef.ByteOrder, &noteType); err != nil {
+			return err
+		}
+		if noteType != wantNoteType {
+			continue
+		}
+		noteName, err := readAligned4(r, namesize)
+		if err != nil {
+			continue
+		}
+		if wantNoteName[0] != noteName[0] ||
+			wantNoteName[1] != noteName[1] ||
+			wantNoteName[2] != noteName[2] ||
+			wantNoteName[3] != noteName[3] {
+			continue
+		}
+		desc, err := readAligned4(r, descsize)
+		if err != nil {
+			return err
+		}
+		descStr := hex.EncodeToString(desc)
+		fmt.Fprintf(os.Stderr, "found build id '%s' in section `%s` notename `%s`\n", descStr, sect.Name, string(noteName))
+	}
+}
+
+func dumpBuildId(ef *elf.File) {
+	for _, sect := range ef.Sections {
+		if sect.Type != elf.SHT_NOTE {
+			continue
+		}
+		dumpBuildIdsInNoteSection(ef, sect)
+	}
+}
+
+func examineFile(filename string, readline readLineMode, db bool) bool {
 
 	var d *dwarf.Data
 	var derr error
@@ -193,6 +259,9 @@ func examineFile(filename string, readline readLineMode) bool {
 		}
 		d, derr = f.DWARF()
 	} else {
+		if db {
+			dumpBuildId(f)
+		}
 		d, derr = f.DWARF()
 	}
 
