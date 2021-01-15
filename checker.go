@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
+	"strings"
 )
 
 type readLineMode int
@@ -21,6 +23,34 @@ const (
 	silentReadLine readLineMode = 1
 	dumpReadLine   readLineMode = 2
 )
+
+type dumpTypesMode int
+
+const (
+	noDumpTypes  dumpTypesMode = 0
+	yesDumpTypes dumpTypesMode = 1
+)
+
+type dumpBuildIdMode int
+
+const (
+	noDumpBuildId  dumpBuildIdMode = 0
+	yesDumpBuildId dumpBuildIdMode = 1
+)
+
+type dumpSizeMode int
+
+const (
+	noDumpSize  dumpSizeMode = 0
+	yesDumpSize dumpSizeMode = 1
+)
+
+type options struct {
+	db dumpBuildIdMode
+	dt dumpTypesMode
+	rl readLineMode
+	sz dumpSizeMode
+}
 
 type dwstate struct {
 	reader      *dwarf.Reader
@@ -105,7 +135,7 @@ func (ds *dwstate) loadEntryByOffset(off dwarf.Offset) (*dwarf.Entry, error) {
 	}
 
 	// Fall back to seek
-	verb(2, "seeking to offset 0x%x", off)
+	verb(3, "seeking to offset 0x%x", off)
 	ds.reader.Seek(off)
 	entry, err := ds.reader.Next()
 	if err != nil {
@@ -242,7 +272,19 @@ func dumpBuildId(ef *elf.File) {
 	}
 }
 
-func examineFile(filename string, readline readLineMode, db bool) bool {
+func dumpSizes(ef *elf.File) {
+	tot := uint64(0)
+	for _, sect := range ef.Sections {
+		if strings.HasPrefix(sect.Name, ".debug_") ||
+			strings.HasPrefix(sect.Name, ".zdebug_") {
+			tot += sect.FileSize
+			verb(2, "dwarf sect %s has size %d", sect.Name, sect.FileSize)
+		}
+	}
+	fmt.Printf("DWARF section size total in bytes: %d\n", tot)
+}
+
+func examineFile(filename string, o options) bool {
 
 	var d *dwarf.Data
 	var derr error
@@ -259,7 +301,10 @@ func examineFile(filename string, readline readLineMode, db bool) bool {
 		}
 		d, derr = f.DWARF()
 	} else {
-		if db {
+		if o.sz == yesDumpSize {
+			dumpSizes(f)
+		}
+		if o.db == yesDumpBuildId {
 			dumpBuildId(f)
 		}
 		d, derr = f.DWARF()
@@ -285,6 +330,16 @@ func examineFile(filename string, readline readLineMode, db bool) bool {
 	dcount := 0
 	absocount := 0
 
+	typeNames := make(map[string]struct{})
+
+	isTypeTag := func(t dwarf.Tag) bool {
+		switch t {
+		case dwarf.TagSubrangeType, dwarf.TagSubroutineType, dwarf.TagArrayType, dwarf.TagBaseType, dwarf.TagPointerType, dwarf.TagStructType, dwarf.TagTypedef:
+			return true
+		}
+		return false
+	}
+
 	// Walk DIEs
 	for idx, off := range ds.dieOffsets {
 		verb(3, "examining DIE at offset 0x%x", off)
@@ -293,6 +348,14 @@ func examineFile(filename string, readline readLineMode, db bool) bool {
 		if err != nil {
 			warn("error examining DWARF: %v", err)
 			return false
+		}
+
+		if o.dt != noDumpTypes {
+			if isTypeTag(die.Tag) {
+				if name, ok := die.Val(dwarf.AttrName).(string); ok {
+					typeNames[name] = struct{}{}
+				}
+			}
 		}
 
 		// Does it have an abstract origin?
@@ -317,7 +380,19 @@ func examineFile(filename string, readline readLineMode, db bool) bool {
 	verb(1, "read %d DIEs, processed %d abstract origin refs",
 		dcount, absocount)
 
-	if readline != noReadLine {
+	if o.dt != noDumpTypes {
+		fmt.Println("Types:")
+		sl := make([]string, 0, len(typeNames))
+		for k := range typeNames {
+			sl = append(sl, k)
+		}
+		sort.Strings(sl)
+		for i := range sl {
+			fmt.Println(i, sl[i])
+		}
+	}
+
+	if o.rl != noReadLine {
 		dr := d.Reader()
 		for {
 			ent, err := dr.Next()
@@ -351,7 +426,7 @@ func examineFile(filename string, readline readLineMode, db bool) bool {
 					fmt.Fprintf(os.Stderr, "%v\n", err)
 					return false
 				}
-				if readline == dumpReadLine {
+				if o.rl == dumpReadLine {
 					fmt.Printf("Address: %x File: %s Line: %d IsStmt: %v PrologueEnd: %v\n", line.Address, line.File.Name, line.Line, line.IsStmt, line.PrologueEnd)
 				}
 			}

@@ -10,36 +10,45 @@ import (
 	"testing"
 )
 
-func TestBasic(t *testing.T) {
-	*verbflag = 1
+const noExtra = "-gcflags="
+const moreInlExtra = "-gcflags=all=-l=4"
 
-	// Avoid using /proc/self/exe if this is a temporary executable,
-	// since "go test" passes -w to the linker.
+func buildSelf(t *testing.T, tdir string, extra string) string {
 	exe := "/proc/self/exe"
 	linked, err := filepath.EvalSymlinks(exe)
 	if err != nil {
 		t.Fatalf("EvalSymlinks(%s) failed: %v", exe, err)
 	}
 	if strings.HasPrefix(linked, "/tmp") && strings.HasSuffix(linked, "dwarf-check.test") {
-		// Create tempdir
-		dir, err := ioutil.TempDir("", "BasicDwarfCheckTest")
-		if err != nil {
-			t.Fatalf("could not create directory: %v", err)
-		}
-		defer os.RemoveAll(dir)
 
 		// Do a build of . into <tmpdir>/out.exe
-		exe = filepath.Join(dir, "out.exe")
+		exe = filepath.Join(tdir, "out.exe")
 		gotoolpath := filepath.Join(runtime.GOROOT(), "bin", "go")
-		cmd := exec.Command(gotoolpath, "build", "-o", exe, ".")
+		cmd := exec.Command(gotoolpath, "build", extra, "-o", exe, ".")
 		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Logf("build: %s\n", b)
 			t.Fatalf("build error: %v", err)
 		}
 	}
+	return exe
+}
+
+func TestBasic(t *testing.T) {
+	*verbflag = 1
+
+	// Create tempdir
+	dir, err := ioutil.TempDir("", "BasicDwarfTest")
+	if err != nil {
+		t.Fatalf("could not create directory: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	// Grab executable to work on.
+	exe := buildSelf(t, dir, noExtra)
 
 	// Now examine the result.
-	res := examineFile(exe, silentReadLine, false)
+	basicOpt := options{rl: silentReadLine}
+	res := examineFile(exe, basicOpt)
 	if !res {
 		t.Errorf("examineFile returned false")
 	}

@@ -22,8 +22,10 @@ var memprofileflag = flag.String("memprofile", "", "write memory profile to `fil
 var memprofilerateflag = flag.Int64("memprofilerate", 0, "set runtime.MemProfileRate to `rate`")
 var cpuprofileflag = flag.String("cpuprofile", "", "write CPU profile to `file`")
 var psmflag = flag.String("psm", "", "write /proc/self/maps to `file`")
+var dumptypesflag = flag.Bool("dumptypes", false, "Dumptype information")
 var readlineflag = flag.Bool("readline", false, "Read dwarf line table.")
 var dumplineflag = flag.Bool("dumpline", false, "Dump dwarf line table.")
+var dumpsizeflag = flag.Bool("showsize", false, "Dump size of dwarf sections table.")
 var dumpbuildidflag = flag.Bool("dumpbuildid", false, "Dump build ids if available.")
 
 var st int
@@ -124,15 +126,24 @@ func main() {
 	if flag.NArg() == 0 {
 		usage("please supply one or more ELF files as command line arguments")
 	}
-	readline := noReadLine
+	var o options
 	if *dumplineflag {
-		readline = dumpReadLine
+		o.rl = dumpReadLine
 	} else if *readlineflag {
-		readline = silentReadLine
+		o.rl = silentReadLine
+	}
+	if *dumpbuildidflag {
+		o.db = yesDumpBuildId
+	}
+	if *dumptypesflag {
+		o.dt = yesDumpTypes
+	}
+	if *dumpsizeflag {
+		o.sz = yesDumpSize
 	}
 	for _, arg := range flag.Args() {
 		for i := 0; i < *iterflag; i++ {
-			examineFile(arg, readline, *dumpbuildidflag)
+			examineFile(arg, o)
 		}
 	}
 	verb(1, "leaving main")
