@@ -22,10 +22,11 @@ var memprofileflag = flag.String("memprofile", "", "write memory profile to `fil
 var memprofilerateflag = flag.Int64("memprofilerate", 0, "set runtime.MemProfileRate to `rate`")
 var cpuprofileflag = flag.String("cpuprofile", "", "write CPU profile to `file`")
 var psmflag = flag.String("psm", "", "write /proc/self/maps to `file`")
+var checkabsflag = flag.Bool("checkabs", true, "Perform abstract function checks.")
 var dumptypesflag = flag.Bool("dumptypes", false, "Dumptype information")
 var readlineflag = flag.Bool("readline", false, "Read dwarf line table.")
 var dumplineflag = flag.Bool("dumpline", false, "Dump dwarf line table.")
-var dumpsizeflag = flag.Bool("showsize", false, "Dump size of dwarf sections table.")
+var dumpsizeflag = flag.Int("showsize", 0, "Dump size of dwarf sections table.")
 var dumpbuildidflag = flag.Bool("dumpbuildid", false, "Dump build ids if available.")
 
 var st int
@@ -138,8 +139,13 @@ func main() {
 	if *dumptypesflag {
 		o.dt = yesDumpTypes
 	}
-	if *dumpsizeflag {
-		o.sz = yesDumpSize
+	if *checkabsflag {
+		o.dc = yesDoAbsChecks
+	}
+	if *dumpsizeflag != 0 {
+		if *dumpsizeflag > 0 {
+			o.sz = detailDumpSize
+		}
 	}
 	for _, arg := range flag.Args() {
 		for i := 0; i < *iterflag; i++ {

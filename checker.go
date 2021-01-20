@@ -38,11 +38,19 @@ const (
 	yesDumpBuildId dumpBuildIdMode = 1
 )
 
+type doAbsChecksMode int
+
+const (
+	noDoAbsChecks  doAbsChecksMode = 0
+	yesDoAbsChecks doAbsChecksMode = 1
+)
+
 type dumpSizeMode int
 
 const (
-	noDumpSize  dumpSizeMode = 0
-	yesDumpSize dumpSizeMode = 1
+	noDumpSize     dumpSizeMode = 0
+	yesDumpSize    dumpSizeMode = 1
+	detailDumpSize dumpSizeMode = 2
 )
 
 type options struct {
@@ -50,6 +58,7 @@ type options struct {
 	dt dumpTypesMode
 	rl readLineMode
 	sz dumpSizeMode
+	dc doAbsChecksMode
 }
 
 type dwstate struct {
@@ -272,16 +281,41 @@ func dumpBuildId(ef *elf.File) {
 	}
 }
 
-func dumpSizes(ef *elf.File) {
-	tot := uint64(0)
+func dumpSizes(ef *elf.File, mode dumpSizeMode) {
+	totDw := uint64(0)
+	totExe := uint64(0)
 	for _, sect := range ef.Sections {
+		totExe += sect.FileSize
 		if strings.HasPrefix(sect.Name, ".debug_") ||
 			strings.HasPrefix(sect.Name, ".zdebug_") {
-			tot += sect.FileSize
-			verb(2, "dwarf sect %s has size %d", sect.Name, sect.FileSize)
+			totDw += sect.FileSize
 		}
 	}
-	fmt.Printf("DWARF section size total in bytes: %d\n", tot)
+	perc := func(v, tot uint64) string {
+		if v == 0 || tot == 0 {
+			return "0%"
+		}
+		fv := float64(v)
+		ft := float64(tot)
+		return fmt.Sprintf("%2.2f%%", (fv/ft)*100.0)
+	}
+	if mode == detailDumpSize {
+		for _, sect := range ef.Sections {
+			if strings.HasPrefix(sect.Name, ".debug_") ||
+				strings.HasPrefix(sect.Name, ".zdebug_") {
+				fmt.Printf("section %15s: %10d bytes, %s of DWARF, %s of exe\n",
+					sect.Name, sect.FileSize,
+					perc(sect.FileSize, totDw),
+					perc(sect.FileSize, totExe))
+			}
+		}
+	}
+	if mode == detailDumpSize {
+		fmt.Printf("DWARF size total: %d bytes, %s of exe\n", totDw, perc(totDw, totExe))
+		fmt.Printf("Exe size total: %d bytes\n", totExe)
+	} else {
+		fmt.Printf("DWARF size total: %d bytes\n", totDw)
+	}
 }
 
 func examineFile(filename string, o options) bool {
@@ -301,8 +335,8 @@ func examineFile(filename string, o options) bool {
 		}
 		d, derr = f.DWARF()
 	} else {
-		if o.sz == yesDumpSize {
-			dumpSizes(f)
+		if o.sz != noDumpSize {
+			dumpSizes(f, o.sz)
 		}
 		if o.db == yesDumpBuildId {
 			dumpBuildId(f)
@@ -321,10 +355,12 @@ func examineFile(filename string, o options) bool {
 	verb(1, "examining DWARF for %s", filename)
 	rdr := d.Reader()
 	ds := dwstate{}
-	err := ds.initialize(rdr)
-	if err != nil {
-		warn("error initializing dwarf state examiner: %v", err)
-		return false
+	if o.dc != noDoAbsChecks || o.dt != noDumpTypes {
+		err := ds.initialize(rdr)
+		if err != nil {
+			warn("error initializing dwarf state examiner: %v", err)
+			return false
+		}
 	}
 
 	dcount := 0
@@ -340,45 +376,47 @@ func examineFile(filename string, o options) bool {
 		return false
 	}
 
-	// Walk DIEs
-	for idx, off := range ds.dieOffsets {
-		verb(3, "examining DIE at offset 0x%x", off)
-		die, err := ds.loadEntryByOffset(off)
-		dcount++
-		if err != nil {
-			warn("error examining DWARF: %v", err)
-			return false
-		}
+	if o.dc != noDoAbsChecks || o.dt != noDumpTypes {
+		// Walk DIEs
+		for idx, off := range ds.dieOffsets {
+			verb(3, "examining DIE at offset 0x%x", off)
+			die, err := ds.loadEntryByOffset(off)
+			dcount++
+			if err != nil {
+				warn("error examining DWARF: %v", err)
+				return false
+			}
 
-		if o.dt != noDumpTypes {
-			if isTypeTag(die.Tag) {
-				if name, ok := die.Val(dwarf.AttrName).(string); ok {
-					typeNames[name] = struct{}{}
+			if o.dt != noDumpTypes {
+				if isTypeTag(die.Tag) {
+					if name, ok := die.Val(dwarf.AttrName).(string); ok {
+						typeNames[name] = struct{}{}
+					}
 				}
 			}
-		}
 
-		// Does it have an abstract origin?
-		ooff, originOK := die.Val(dwarf.AttrAbstractOrigin).(dwarf.Offset)
-		if !originOK {
-			continue
-		}
-		absocount++
-
-		// All abstract origin references should be resolvable.
-		var entry *dwarf.Entry
-		entry, err = ds.loadEntryByOffset(ooff)
-		if err != nil || entry == nil {
-			warn("unresolved abstract origin ref from DIE %d at offset 0x%x to bad offset 0x%x\n", idx, off, ooff)
-			err := ds.dumpEntry(idx, false, true, 0)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%v\n", err)
+			// Does it have an abstract origin?
+			ooff, originOK := die.Val(dwarf.AttrAbstractOrigin).(dwarf.Offset)
+			if !originOK {
+				continue
 			}
-			return false
+			absocount++
+
+			// All abstract origin references should be resolvable.
+			var entry *dwarf.Entry
+			entry, err = ds.loadEntryByOffset(ooff)
+			if err != nil || entry == nil {
+				warn("unresolved abstract origin ref from DIE %d at offset 0x%x to bad offset 0x%x\n", idx, off, ooff)
+				err := ds.dumpEntry(idx, false, true, 0)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "%v\n", err)
+				}
+				return false
+			}
 		}
+		verb(1, "read %d DIEs, processed %d abstract origin refs",
+			dcount, absocount)
 	}
-	verb(1, "read %d DIEs, processed %d abstract origin refs",
-		dcount, absocount)
 
 	if o.dt != noDumpTypes {
 		fmt.Println("Types:")
