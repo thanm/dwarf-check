@@ -71,7 +71,6 @@ func (ds *DwExaminer) LoadEntryByID(idx int) (*dwarf.Entry, error) {
 }
 
 func (ds *DwExaminer) LoadEntryByOffset(off dwarf.Offset) (*dwarf.Entry, error) {
-
 	// Check to make sure this is a valid offset
 	if _, found := ds.idxByOffset[off]; !found {
 		return nil, fmt.Errorf("invalid offset 0x%x passed to loadEntryByOffset", off)
@@ -106,6 +105,33 @@ func (ds *DwExaminer) LoadEntryByOffset(off dwarf.Offset) (*dwarf.Entry, error) 
 	}
 	ds.cur = entry
 	return ds.cur, nil
+}
+
+func (ds *DwExaminer) SkipChildren() (int, error) {
+	if ds.cur == nil {
+		return -1, fmt.Errorf("misuse of SkipChildren (no current die)")
+	}
+	doff := ds.cur.Offset
+	ds.reader.SkipChildren()
+	for {
+		nxt, err := ds.reader.Next()
+		if err != nil {
+			return -1, err
+		}
+		if nxt == nil {
+			return -1, nil
+		}
+		if nidx, ok := ds.idxByOffset[nxt.Offset]; ok {
+			ds.cur = nxt
+			return nidx, nil
+		}
+		// end of CU? advance
+		if nxt.Tag == 0 {
+			continue
+		}
+		// ???
+		return -1, fmt.Errorf("SkipChildren() from die at offset %x landed on unknown DIE with offset %x (%+v)\n", doff, nxt.Offset, nxt)
+	}
 }
 
 func indent(ilevel int) {
