@@ -4,10 +4,10 @@ import (
 	"debug/dwarf"
 	"debug/elf"
 	"debug/macho"
+	"debug/pe"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/thanm/dwarf-check/dwexaminer"
@@ -17,21 +17,12 @@ const noExtra = "-gcflags="
 const moreInlExtra = "-gcflags=all=-l=4"
 
 func buildSelf(t *testing.T, tdir string, extra string) string {
-	exe := "/proc/self/exe"
-	linked, err := filepath.EvalSymlinks(exe)
-	if err != nil {
-		t.Fatalf("EvalSymlinks(%s) failed: %v", exe, err)
-	}
-	if strings.HasPrefix(linked, "/tmp") && strings.HasSuffix(linked, "dwarf-check.test") {
-
-		// Do a build of . into <tmpdir>/out.exe
-		exe = filepath.Join(tdir, "out.exe")
-		gotoolpath := filepath.Join(runtime.GOROOT(), "bin", "go")
-		cmd := exec.Command(gotoolpath, "build", extra, "-o", exe, ".")
-		if b, err := cmd.CombinedOutput(); err != nil {
-			t.Logf("build: %s\n", b)
-			t.Fatalf("build error: %v", err)
-		}
+	exe := filepath.Join(tdir, "out.exe")
+	gotoolpath := filepath.Join(runtime.GOROOT(), "bin", "go")
+	cmd := exec.Command(gotoolpath, "build", extra, "-o", exe, ".")
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Logf("build: %s\n", b)
+		t.Fatalf("build error: %v", err)
 	}
 	return exe
 }
@@ -52,18 +43,52 @@ func TestBasic(t *testing.T) {
 	var d *dwarf.Data
 	var derr error
 
-	// Now examine the result.
-	f, eerr := elf.Open(exe)
-	if eerr != nil {
-		// Try macho
-		f, merr := macho.Open(exe)
-		if merr != nil {
-			t.Logf("unable to open as ELF %s: %v\n", exe, eerr)
-			t.Fatalf("unable to open as Mach-O %s: %v\n", exe, merr)
+	tries := []struct {
+		opener func(exe string) (*dwarf.Data, error)
+		flav   string
+	}{
+		{flav: "ELF",
+			opener: func(exe string) (*dwarf.Data, error) {
+				f, err := elf.Open(exe)
+				if err != nil {
+					return nil, err
+				}
+				return f.DWARF()
+			},
+		},
+		{
+			flav: "Macho",
+			opener: func(exe string) (*dwarf.Data, error) {
+				f, err := macho.Open(exe)
+				if err != nil {
+					return nil, err
+				}
+				return f.DWARF()
+			},
+		},
+		{
+			flav: "PE",
+			opener: func(exe string) (*dwarf.Data, error) {
+				f, err := pe.Open(exe)
+				if err != nil {
+					return nil, err
+				}
+				return f.DWARF()
+			},
+		},
+	}
+
+	for _, try := range tries {
+		d, derr = try.opener(exe)
+		if derr != nil {
+			t.Logf("unable to open %s as %s: %v\n",
+				exe, try.flav, derr)
+			continue
 		}
-		d, derr = f.DWARF()
-	} else {
-		d, derr = f.DWARF()
+		break
+	}
+	if d == nil {
+		t.Fatalf("unable to open %s\n", exe)
 	}
 
 	// Create DWARF reader
