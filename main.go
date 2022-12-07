@@ -1,9 +1,7 @@
-//
 // This program reads in DWARF info for a given load module (shared
 // library or executable) and inspects it for problems/insanities,
 // primarily abstract origin references that are incorrect.
 // Can be run on object files as well, in theory.
-//
 package main
 
 import (
@@ -56,7 +54,6 @@ func verb(vlevel int, s string, a ...interface{}) {
 func warn(s string, a ...interface{}) {
 	fmt.Fprintf(os.Stderr, s, a...)
 	fmt.Fprintf(os.Stderr, "\n")
-	st = 1
 }
 
 func usage(msg string) {

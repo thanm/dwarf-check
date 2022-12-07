@@ -227,7 +227,7 @@ func examineFile(filename string, o options) bool {
 		verb(1, "loading %s for %s", try.flav, filename)
 		d, derr = try.opener(filename)
 		if derr != nil {
-			warn("unable to open %s as %s: %v\n",
+			warn("unable to open %s as %s: %v",
 				filename, try.flav, derr)
 			continue
 		}
@@ -359,5 +359,6 @@ func examineFile(filename string, o options) bool {
 		}
 	}
 
+	verb(1, "true return from examineFile")
 	return true
 }
