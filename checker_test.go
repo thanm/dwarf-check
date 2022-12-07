@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"testing"
 )
 
@@ -26,6 +28,17 @@ func buildSelf(t *testing.T, tdir string, extra string) string {
 
 func TestBasic(t *testing.T) {
 	*verbflag = 1
+
+	bip, ok := debug.ReadBuildInfo()
+	if !ok {
+		println("no build info")
+	} else {
+		println("main package path", bip.Path)
+		fmt.Printf("main mod: %+v\n", bip.Main)
+		for k, dep := range bip.Deps {
+			fmt.Printf("  dep %d: %+v\n", k, dep)
+		}
+	}
 
 	// Create tempdir
 	dir, err := ioutil.TempDir("", "BasicDwarfTest")
