@@ -7,6 +7,7 @@ import (
 	"debug/dwarf"
 	"debug/elf"
 	"debug/macho"
+	"debug/pe"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -180,31 +181,59 @@ func examineFile(filename string, o options) bool {
 	var d *dwarf.Data
 	var derr error
 
-	verb(1, "loading ELF for %s", filename)
-	f, eerr := elf.Open(filename)
-	if eerr != nil {
-		// Try macho
-		f, merr := macho.Open(filename)
-		if merr != nil {
-			warn("unable to open as ELF %s: %v\n", filename, eerr)
-			warn("unable to open as Mach-O %s: %v\n", filename, merr)
-			return false
-		}
-		d, derr = f.DWARF()
-	} else {
-		if o.sz != noDumpSize {
-			dumpSizes(f, o.sz)
-		}
-		if o.db == yesDumpBuildId {
-			dumpBuildId(f)
-		}
-		d, derr = f.DWARF()
+	tries := []struct {
+		opener func(exe string) (*dwarf.Data, error)
+		flav   string
+	}{
+		{flav: "ELF",
+			opener: func(exe string) (*dwarf.Data, error) {
+				f, err := elf.Open(exe)
+				if err != nil {
+					return nil, err
+				}
+				rv, err := f.DWARF()
+				if o.sz != noDumpSize {
+					dumpSizes(f, o.sz)
+				}
+				if o.db == yesDumpBuildId {
+					dumpBuildId(f)
+				}
+				return rv, err
+			},
+		},
+		{
+			flav: "Macho",
+			opener: func(exe string) (*dwarf.Data, error) {
+				f, err := macho.Open(exe)
+				if err != nil {
+					return nil, err
+				}
+				return f.DWARF()
+			},
+		},
+		{
+			flav: "PE",
+			opener: func(exe string) (*dwarf.Data, error) {
+				f, err := pe.Open(exe)
+				if err != nil {
+					return nil, err
+				}
+				return f.DWARF()
+			},
+		},
 	}
 
-	// Create DWARF reader
-	verb(1, "loading DWARF for %s", filename)
-	if derr != nil {
-		warn("error reading DWARF: %v", derr)
+	for _, try := range tries {
+		verb(1, "loading %s for %s", try.flav, filename)
+		d, derr = try.opener(filename)
+		if derr != nil {
+			warn("unable to open %s as %s: %v\n",
+				filename, try.flav, derr)
+			continue
+		}
+		break
+	}
+	if d == nil {
 		return false
 	}
 
