@@ -4,9 +4,9 @@ DWARF checker. Looks for and reports insanities in DWARF info. This tool is desi
 
 ```
 $ ./dwarf-check suspect-executable
-unresolved abstract origin ref from DIE 270354 at offset 0x83f9f7 to bad offset 0x83de0b
+unresolved abstract origin ref from DIE 270354 at offset 0x83f9e7 to bad offset 0x83de0b
 
-0x83f9f7: FormalParameter
+0x83f9e7: FormalParameter
 at=AbstractOrigin val=0x83de0b
 at=Location val=0x9108
 
